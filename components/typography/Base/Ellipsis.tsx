@@ -98,7 +98,7 @@ function sliceNodes(nodeList: React.ReactElement[], len: number) {
 }
 
 export interface EllipsisProps {
-  enabledMeasure?: boolean;
+  enableMeasure?: boolean;
   text?: React.ReactNode;
   width: number;
   // fontSize: number;
@@ -131,7 +131,7 @@ const lineClipStyle: React.CSSProperties = {
 };
 
 export default function EllipsisMeasure(props: EllipsisProps) {
-  const { enabledMeasure, width, text, children, rows, miscDeps, onEllipsis } = props;
+  const { enableMeasure, width, text, children, rows, miscDeps, onEllipsis } = props;
 
   const nodeList = React.useMemo(() => toArray(text), [text]);
   const nodeLen = React.useMemo(() => getNodesLen(nodeList), [text]);
@@ -146,17 +146,21 @@ export default function EllipsisMeasure(props: EllipsisProps) {
   // ========================= NeedEllipsis =========================
   const needEllipsisRef = React.useRef<MeasureTextRef>(null);
 
+  // Measure for `rows-1` height, to avoid operation exceed the line height
+  const descRowsEllipsisRef = React.useRef<MeasureTextRef>(null);
+  const symbolRowEllipsisRef = React.useRef<MeasureTextRef>(null);
+
   const [needEllipsis, setNeedEllipsis] = React.useState(STATUS_MEASURE_NONE);
   const [ellipsisHeight, setEllipsisHeight] = React.useState(0);
 
   // Trigger start measure
   useLayoutEffect(() => {
-    if (enabledMeasure && width && nodeLen) {
+    if (enableMeasure && width && nodeLen) {
       setNeedEllipsis(STATUS_MEASURE_START);
     } else {
       setNeedEllipsis(STATUS_MEASURE_NONE);
     }
-  }, [width, text, rows, enabledMeasure, nodeList]);
+  }, [width, text, rows, enableMeasure, nodeList]);
 
   // Measure process
   useLayoutEffect(() => {
@@ -166,8 +170,17 @@ export default function EllipsisMeasure(props: EllipsisProps) {
       setNeedEllipsis(isOverflow ? STATUS_MEASURE_NEED_ELLIPSIS : STATUS_MEASURE_NO_NEED_ELLIPSIS);
       setEllipsisCutIndex(isOverflow ? [0, nodeLen] : null);
 
-      // For the accuracy issue, we add 1px to the height
-      setEllipsisHeight((needEllipsisRef.current?.getHeight() || 0) + 1);
+      // Get the basic height of ellipsis rows
+      const baseRowsEllipsisHeight = needEllipsisRef.current?.getHeight() || 0;
+
+      // Get the height of `rows - 1` + symbol height
+      const descRowsEllipsisHeight = rows === 1 ? 0 : descRowsEllipsisRef.current?.getHeight() || 0;
+      const symbolRowEllipsisHeight = symbolRowEllipsisRef.current?.getHeight() || 0;
+      const rowsWithEllipsisHeight = descRowsEllipsisHeight + symbolRowEllipsisHeight;
+
+      const maxRowsHeight = Math.max(baseRowsEllipsisHeight, rowsWithEllipsisHeight);
+
+      setEllipsisHeight(maxRowsHeight + 1);
 
       onEllipsis(isOverflow);
     }
@@ -246,16 +259,43 @@ export default function EllipsisMeasure(props: EllipsisProps) {
 
       {/* Measure if current content is exceed the rows */}
       {needEllipsis === STATUS_MEASURE_START && (
-        <MeasureText
-          style={{
-            ...measureStyle,
-            ...lineClipStyle,
-            WebkitLineClamp: rows,
-          }}
-          ref={needEllipsisRef}
-        >
-          {fullContent}
-        </MeasureText>
+        <>
+          {/** With `rows` */}
+          <MeasureText
+            style={{
+              ...measureStyle,
+              ...lineClipStyle,
+              WebkitLineClamp: rows,
+            }}
+            ref={needEllipsisRef}
+          >
+            {fullContent}
+          </MeasureText>
+
+          {/** With `rows - 1` */}
+          <MeasureText
+            style={{
+              ...measureStyle,
+              ...lineClipStyle,
+              WebkitLineClamp: rows - 1,
+            }}
+            ref={descRowsEllipsisRef}
+          >
+            {fullContent}
+          </MeasureText>
+
+          {/** With `rows - 1` */}
+          <MeasureText
+            style={{
+              ...measureStyle,
+              ...lineClipStyle,
+              WebkitLineClamp: 1,
+            }}
+            ref={symbolRowEllipsisRef}
+          >
+            {children([], true, true)}
+          </MeasureText>
+        </>
       )}
 
       {/* Real size overflow measure */}
